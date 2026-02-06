@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+langchain
+google-cloud-aiplatform
+faiss-cpu
+pypdf
