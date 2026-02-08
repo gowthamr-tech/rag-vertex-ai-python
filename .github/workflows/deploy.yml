@@ -24,9 +24,18 @@ jobs:
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
+      - name: 'Configure Docker'
+        run: |-
+          # This command links Docker to your GCP credentials
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
       - name: 'Build and Push Container'
         run: |-
-          gcloud builds submit --tag us-central1-docker.pkg.dev/$PROJECT_ID/rag-repo/$SERVICE_NAME:$GITHUB_SHA
+          # Build locally on the GitHub runner (uses GitHub SA permissions)
+          docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/rag-repo/$SERVICE_NAME:$GITHUB_SHA .
+          
+          # Push the image to Artifact Registry
+          docker push us-central1-docker.pkg.dev/$PROJECT_ID/rag-repo/$SERVICE_NAME:$GITHUB_SHA
 
       - name: 'Deploy to Cloud Run'
         run: |-
