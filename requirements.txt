@@ -4,8 +4,9 @@ uvicorn==0.39.0
 python-dotenv==1.2.1
 
 # AI & LLM (Google Vertex AI)
+# We remove the strict version for genai to let aiplatform handle it
 google-cloud-aiplatform==1.136.0
-google-genai==1.47.0
+google-genai
 langchain-google-vertexai==2.1.2
 
 # Vector DB & Retrieval
