@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+import uvicorn
+import os
 from app.rag import build_qa_chain
 
 app = FastAPI(title="RAG Vertex AI API")
@@ -28,3 +30,9 @@ Question:
 
     answer = llm.invoke(prompt)
     return {"answer": answer.content}
+
+
+if __name__ == "__main__":
+    # Cloud Run provides the PORT environment variable
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)

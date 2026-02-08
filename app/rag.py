@@ -54,22 +54,23 @@ def build_qa_chain():
 
         # 1. Setup Postgres Connection
         # Format: postgresql+psycopg2://user:password@host:port/dbname
-        db_uri = "postgresql+psycopg2://postgres:1234@localhost:5432/testing_data"
-        db=SQLDatabase.from_uri(db_uri)
-        # 2. Corrected SQL Loader
-        sql_loader = SQLDatabaseLoader(
-            # We use a query to combine columns into a single descriptive string
-         query="SELECT id, 'Person: ' || person_name || ' booked the movie: ' || movie_name as booking_info FROM public.ticket_bookings",
-         db=db,
-        #  page_content_col="booking_info" # This matches the alias in our query above
-        )     
-        sql_docs=sql_loader.load()
+        # db_uri = "postgresql+psycopg2://postgres:1234@localhost:5432/testing_data"
+        # db=SQLDatabase.from_uri(db_uri)
+        # # 2. Corrected SQL Loader
+        # sql_loader = SQLDatabaseLoader(
+        #     # We use a query to combine columns into a single descriptive string
+        #  query="SELECT id, 'Person: ' || person_name || ' booked the movie: ' || movie_name as booking_info FROM public.ticket_bookings",
+        #  db=db,
+        # #  page_content_col="booking_info" # This matches the alias in our query above
+        # )     
+        # sql_docs=sql_loader.load()
         
 
         web_links=["https://in.bookmyshow.com/explore/home/chennai","https://tickets.chennaimetrorail.org/onlineticket","https://chennaimetrorail.org/phonepe/","https://www.zomato.com/chennai/restaurants/on/east-coast-road-ecr?page=6&order-online=1"]
         web_loader=WebBaseLoader(web_links)
         web_docs=web_loader.load()
-        all_docs = docs + web_docs+sql_docs
+        all_docs = docs + web_docs
+        # +sql_docs
 
         # 2. Split Text
     
