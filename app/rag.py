@@ -49,8 +49,8 @@ def build_qa_chain():
                 spec=ServerlessSpec(cloud='aws', region='us-east-1')
             )
         # 1. Load PDF
-        loader = PyPDFLoader(str(pdf_path))
-        docs = loader.load()
+        # loader = PyPDFLoader(str(pdf_path))
+        # docs = loader.load()
 
         # 1. Setup Postgres Connection
         # Format: postgresql+psycopg2://user:password@host:port/dbname
@@ -69,7 +69,7 @@ def build_qa_chain():
         web_links=["https://in.bookmyshow.com/explore/home/chennai","https://tickets.chennaimetrorail.org/onlineticket","https://chennaimetrorail.org/phonepe/","https://www.zomato.com/chennai/restaurants/on/east-coast-road-ecr?page=6&order-online=1"]
         web_loader=WebBaseLoader(web_links)
         web_docs=web_loader.load()
-        all_docs = docs + web_docs
+        all_docs = web_docs
         # +sql_docs
 
         # 2. Split Text
