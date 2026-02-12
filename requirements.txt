@@ -3,25 +3,22 @@ fastapi==0.128.2
 uvicorn==0.39.0
 python-dotenv==1.2.1
 
-# AI & LLM (Google Vertex AI)
-# We remove the strict version for genai to let aiplatform handle it
-google-cloud-aiplatform==1.136.0
-google-genai
+# AI & LLM (Unified Google SDK)
+# This is the specific package your code is looking for
+langchain-google-genai>=2.0.0
 langchain-google-vertexai==2.1.2
+google-cloud-aiplatform==1.136.0
 
 # Vector DB & Retrieval
 pinecone-client
 langchain==0.3.27
 langchain-community==0.3.31
 langchain-core==0.3.79
-sentence-transformers==5.1.2
 
-# Data Processing
+# Database & Data Processing
+psycopg2-binary
+sqlalchemy
+beautifulsoup4
+pypdf==6.1.3
 numpy==2.0.2
 pandas==2.3.3
-pypdf==6.1.3
-
-# Utilities
-pydantic==2.12.4
-requests==2.32.5
-tqdm==4.67.1
