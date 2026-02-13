@@ -1,41 +1,53 @@
-from fastapi import FastAPI
 import os
-from app.rag import build_qa_chain
+import shutil
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from app.rag import ingest_pdf, get_answer
 
-app = FastAPI(title="RAG Vertex AI API")
-
-rag_components = {
-    "vector_db": None,
-    "llm": None
-}
+app = FastAPI(title="RAG Vertex AI Service")
 
 @app.get("/")
-def health():
-    return {"status": "RAG app is running"}
+def health_check():
+    return {"status": "running"}
 
+# 🔹 Endpoint to upload and index the PDF
+@app.post("/upload")
+async def upload_document(file: UploadFile = File(...)):
+    # Validate file type
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+    
+    temp_path = f"/tmp/{file.filename}"
+    
+    try:
+        # Save file to temporary storage
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Ingest into Pinecone
+        num_chunks = ingest_pdf(temp_path)
+        
+        return {
+            "message": f"Successfully indexed {file.filename}",
+            "chunks_created": num_chunks
+        }
+    except Exception as e:
+        print(f"Upload Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Clean up the file from /tmp to save memory
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+# 🔹 Endpoint to ask questions
 @app.post("/ask")
-def ask_question(question: str):
-    # 🔹 Lazy initialization
-    if rag_components["vector_db"] is None:
-        vector_db, llm = build_qa_chain()
-        rag_components["vector_db"] = vector_db
-        rag_components["llm"] = llm
-
-    vector_db = rag_components["vector_db"]
-    llm = rag_components["llm"]
-
-    docs = vector_db.similarity_search(question, k=3)
-    context = "\n\n".join([d.page_content for d in docs])
-
-    prompt = f"""
-    Use the context below to answer the question.
-
-    Context:
-    {context}
-
-    Question:
-    {question}
-    """
-
-    answer = llm.invoke(prompt)
-    return {"answer": answer.content}
+async def ask_question(question: str):
+    if not question:
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+        
+    try:
+        answer = get_answer(question)
+        print(f"Question: {question} | Answer: {answer}")
+        return {"question": question, "answer": answer}
+    except Exception as e:
+        print(f"Ask Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
