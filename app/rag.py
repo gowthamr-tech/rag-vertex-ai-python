@@ -117,68 +117,66 @@
 #         raise e
 
 import os
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from dotenv import load_dotenv
+from langchain_google_vertexai import ChatVertexAI, VertexAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_pinecone import PineconeVectorStore
-from openai import api_key
-from dotenv import load_dotenv
 
-
-# Load environment variables from .env
+# Load environment variables
 load_dotenv()
-# Helper to get embeddings 
+
+# 1. Helper for Embeddings (Vertex AI Native)
 def get_embeddings():
-    return GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001",
+    return VertexAIEmbeddings(
+        model_name="gemini-embedding-001", # Standard Vertex model (768 dims)
         project=os.getenv("GCP_PROJECT_ID"),
         location=os.getenv("GCP_LOCATION", "us-central1"),
-        vertexai=True
+
     )
 
-# 🔹 FUNCTION 1: Process and save to Vector DB
+# 2. Ingest PDF to Pinecone
 def ingest_pdf(pdf_path: str):
-    # Fetch credentials from environment
     api_key = os.getenv("PINECONE_API_KEY")
     index_name = os.getenv("PINECONE_INDEX_NAME")
     
-    # 1. Load and Split
     loader = PyPDFLoader(pdf_path)
     docs = loader.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=80)
     chunks = splitter.split_documents(docs)
     
-    # 2. Store in Pinecone (Explicitly passing the API Key)
+    # Stores docs in Pinecone using Vertex embeddings
     PineconeVectorStore.from_documents(
         documents=chunks,
         embedding=get_embeddings(),
         index_name=index_name,
-        pinecone_api_key=api_key  # <--- CRITICAL FIX
+        pinecone_api_key=api_key
     )
     return len(chunks)
 
-# 🔹 FUNCTION 2: Search and Answer
+# 3. Retrieve and Generate Answer
 def get_answer(question: str):
     api_key = os.getenv("PINECONE_API_KEY")
     index_name = os.getenv("PINECONE_INDEX_NAME")
-    print(f"Using Pinecone API Key: {api_key}")  # Debugging line to confirm API key is loaded
-    # 1. Connect to existing index
+    
+    # Connect to index
     vector_db = PineconeVectorStore(
         index_name=index_name,
         embedding=get_embeddings(),
-        pinecone_api_key=api_key  # <--- CRITICAL FIX
+        pinecone_api_key=api_key
     )
-    print("Connected to Pinecone index successfully.")
-    # 2. Setup LLM
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash", 
-        vertexai=True,
+    print("I am before llm search")
+    # Initialize Vertex AI LLM
+    llm = ChatVertexAI(
+        model_name="gemini-2.5-pro", 
+        project=os.getenv("GCP_PROJECT_ID"),
+        location=os.getenv("GCP_LOCATION", "us-central1"),
         temperature=0.2
     )
     
-    # 3. Retrieve and Generate
+    # Similarity Search
     docs = vector_db.similarity_search(question, k=3)
     context = "\n".join([d.page_content for d in docs])
     
-    prompt = f"Use the context below to answer: {question}\n\nContext: {context}"
+    prompt = f"Use the context below to answer the question.\n\nContext: {context}\n\nQuestion: {question}"
     return llm.invoke(prompt).content
