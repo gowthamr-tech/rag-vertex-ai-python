@@ -117,9 +117,11 @@
 #         raise e
 
 import os
+import re
 from dotenv import load_dotenv
 from langchain_google_vertexai import ChatVertexAI, VertexAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_pinecone import PineconeVectorStore
 
@@ -135,11 +137,40 @@ def get_embeddings():
 
     )
 
+
+def get_vector_store():
+    return PineconeVectorStore(
+        index_name=os.getenv("PINECONE_INDEX_NAME"),
+        embedding=get_embeddings(),
+        pinecone_api_key=os.getenv("PINECONE_API_KEY")
+    )
+
+
+def normalize_text(value: str) -> str:
+    normalized = value.lower().strip()
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def lexical_rerank(question: str, docs: list[Document], top_k: int) -> list[Document]:
+    question_terms = set(normalize_text(question).split())
+    if not question_terms:
+        return docs[:top_k]
+
+    scored_docs: list[tuple[float, int, Document]] = []
+    for index, doc in enumerate(docs):
+        doc_terms = set(normalize_text(doc.page_content).split())
+        overlap = len(question_terms & doc_terms)
+        coverage = overlap / len(question_terms)
+        density = overlap / max(len(doc_terms), 1)
+        score = coverage + (0.2 * density)
+        scored_docs.append((score, index, doc))
+
+    scored_docs.sort(key=lambda item: (-item[0], item[1]))
+    return [doc for _, _, doc in scored_docs[:top_k]]
+
 # 2. Ingest PDF to Pinecone
 def ingest_pdf(pdf_path: str):
-    api_key = os.getenv("PINECONE_API_KEY")
-    index_name = os.getenv("PINECONE_INDEX_NAME")
-    
     loader = PyPDFLoader(pdf_path)
     docs = loader.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=80)
@@ -149,23 +180,28 @@ def ingest_pdf(pdf_path: str):
     PineconeVectorStore.from_documents(
         documents=chunks,
         embedding=get_embeddings(),
-        index_name=index_name,
-        pinecone_api_key=api_key
+        index_name=os.getenv("PINECONE_INDEX_NAME"),
+        pinecone_api_key=os.getenv("PINECONE_API_KEY")
     )
     return len(chunks)
 
+def get_retrieved_documents(
+    question: str,
+    k: int = 3,
+    use_reranking: bool = False,
+    rerank_k: int | None = None,
+):
+    vector_db = get_vector_store()
+    if not use_reranking:
+        return vector_db.similarity_search(question, k=k)
+
+    candidate_k = max(rerank_k or (k * 3), k)
+    candidate_docs = vector_db.similarity_search(question, k=candidate_k)
+    return lexical_rerank(question, candidate_docs, top_k=k)
+
+
 # 3. Retrieve and Generate Answer
-def get_answer(question: str):
-    api_key = os.getenv("PINECONE_API_KEY")
-    index_name = os.getenv("PINECONE_INDEX_NAME")
-    
-    # Connect to index
-    vector_db = PineconeVectorStore(
-        index_name=index_name,
-        embedding=get_embeddings(),
-        pinecone_api_key=api_key
-    )
-    print("I am before llm search")
+def get_answer(question: str, docs=None, use_reranking: bool = False, rerank_k: int | None = None):
     # Initialize Vertex AI LLM
     llm = ChatVertexAI(
         model_name="gemini-2.5-pro", 
@@ -175,7 +211,13 @@ def get_answer(question: str):
     )
     
     # Similarity Search
-    docs = vector_db.similarity_search(question, k=3)
+    if docs is None:
+        docs = get_retrieved_documents(
+            question,
+            k=3,
+            use_reranking=use_reranking,
+            rerank_k=rerank_k,
+        )
     context = "\n".join([d.page_content for d in docs])
     
     prompt = f"Use the context below to answer the question.\n\nContext: {context}\n\nQuestion: {question}"

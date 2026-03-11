@@ -1,5 +1,29 @@
-# .gitignore
+# Environment
 .env
+.env.*
+
+# Virtual environments
 .venv/
+venv/
+
+# Python caches and build artifacts
 __pycache__/
+*.py[cod]
+.pycache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local data and indexes
 data/*.pdf
+my_index/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
