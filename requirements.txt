@@ -22,3 +22,5 @@ numpy
 pandas
 psycopg2-binary
 sqlalchemy
+datasets
+ragas

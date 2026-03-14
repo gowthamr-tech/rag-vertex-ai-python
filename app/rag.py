@@ -118,12 +118,14 @@
 
 import os
 import re
+from typing import Any
 from dotenv import load_dotenv
 from langchain_google_vertexai import ChatVertexAI, VertexAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_pinecone import PineconeVectorStore
+from pinecone import Pinecone
 
 # Load environment variables
 load_dotenv()
@@ -138,12 +140,32 @@ def get_embeddings():
     )
 
 
+def get_llm():
+    return ChatVertexAI(
+        model_name="gemini-2.5-pro",
+        project=os.getenv("GCP_PROJECT_ID"),
+        location=os.getenv("GCP_LOCATION", "us-central1"),
+        temperature=0.2
+    )
+
+
 def get_vector_store():
     return PineconeVectorStore(
         index_name=os.getenv("PINECONE_INDEX_NAME"),
         embedding=get_embeddings(),
         pinecone_api_key=os.getenv("PINECONE_API_KEY")
     )
+
+
+def clear_pinecone_index(namespace: str | None = None):
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
+
+    delete_kwargs = {"delete_all": True}
+    if namespace:
+        delete_kwargs["namespace"] = namespace
+
+    index.delete(**delete_kwargs)
 
 
 def normalize_text(value: str) -> str:
@@ -169,21 +191,61 @@ def lexical_rerank(question: str, docs: list[Document], top_k: int) -> list[Docu
     scored_docs.sort(key=lambda item: (-item[0], item[1]))
     return [doc for _, _, doc in scored_docs[:top_k]]
 
-# 2. Ingest PDF to Pinecone
-def ingest_pdf(pdf_path: str):
-    loader = PyPDFLoader(pdf_path)
-    docs = loader.load()
-    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=80)
-    chunks = splitter.split_documents(docs)
-    
-    # Stores docs in Pinecone using Vertex embeddings
+
+def build_documents_from_records(
+    records: list[dict[str, Any]],
+    text_field: str,
+    metadata_fields: list[str] | None = None,
+    static_metadata: dict[str, Any] | None = None,
+) -> list[Document]:
+    metadata_fields = metadata_fields or []
+    static_metadata = static_metadata or {}
+
+    documents: list[Document] = []
+    for index, record in enumerate(records):
+        content = record.get(text_field)
+        if content is None:
+            continue
+
+        page_content = str(content).strip()
+        if not page_content:
+            continue
+
+        metadata = dict(static_metadata)
+        for field in metadata_fields:
+            if field in record and record[field] is not None:
+                metadata[field] = record[field]
+
+        metadata.setdefault("record_index", index)
+        documents.append(Document(page_content=page_content, metadata=metadata))
+
+    return documents
+
+
+def ingest_documents(
+    documents: list[Document],
+    chunk_size: int = 800,
+    chunk_overlap: int = 80,
+):
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
+    chunks = splitter.split_documents(documents)
+
     PineconeVectorStore.from_documents(
         documents=chunks,
         embedding=get_embeddings(),
         index_name=os.getenv("PINECONE_INDEX_NAME"),
-        pinecone_api_key=os.getenv("PINECONE_API_KEY")
+        pinecone_api_key=os.getenv("PINECONE_API_KEY"),
     )
     return len(chunks)
+
+# 2. Ingest PDF to Pinecone
+def ingest_pdf(pdf_path: str):
+    loader = PyPDFLoader(pdf_path)
+    docs = loader.load()
+    return ingest_documents(docs, chunk_size=800, chunk_overlap=80)
 
 def get_retrieved_documents(
     question: str,
@@ -202,13 +264,7 @@ def get_retrieved_documents(
 
 # 3. Retrieve and Generate Answer
 def get_answer(question: str, docs=None, use_reranking: bool = False, rerank_k: int | None = None):
-    # Initialize Vertex AI LLM
-    llm = ChatVertexAI(
-        model_name="gemini-2.5-pro", 
-        project=os.getenv("GCP_PROJECT_ID"),
-        location=os.getenv("GCP_LOCATION", "us-central1"),
-        temperature=0.2
-    )
+    llm = get_llm()
     
     # Similarity Search
     if docs is None:

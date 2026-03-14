@@ -47,8 +47,10 @@ pip install -r requirements.txt
 ## Run
 
 ```bash
-uvicorn app.main:app --reload
+./scripts/run_dev.sh
 ```
+
+This script limits auto-reload watching to [`app/`](/Users/Apple/Documents/rag_vertex_project/app) and [`scripts/`](/Users/Apple/Documents/rag_vertex_project/scripts), so package changes inside `.venv/` do not keep restarting the server.
 
 Service URL:
 
@@ -61,6 +63,41 @@ Interactive docs:
 ```text
 http://127.0.0.1:8000/docs
 ```
+
+## Frontend Dashboard
+
+The React + Vite + TypeScript evaluation dashboard is now maintained separately at [`rag_frontend_react`](/Users/Apple/Documents/rag_frontend_react).
+
+It lets you:
+
+- paste evaluation datasets
+- run baseline retrieval
+- run reranked retrieval
+- compare summary metrics side by side
+- inspect retrieved evidence and per-question diagnostics
+
+### Run the dashboard
+
+Start the FastAPI backend first:
+
+```bash
+./scripts/run_dev.sh
+```
+
+Then in a second terminal:
+
+```bash
+cd /Users/Apple/Documents/rag_frontend_react
+npm run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:5173
+```
+
+The backend already allows CORS from the local Vite server on port `5173`.
 
 ## API Endpoints
 
